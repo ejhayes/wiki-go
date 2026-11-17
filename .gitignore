@@ -44,6 +44,7 @@ cmd
 !README.md
 !SECURITY.md
 !CHANGELOG.md
+!EMBEDDING.md
 # for quick python tests
 /.venv
 
