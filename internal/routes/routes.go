@@ -180,8 +180,16 @@ func handleFaviconRequest(w http.ResponseWriter, r *http.Request, cfg *config.Co
 	http.ServeFile(w, r, filepath.Join("internal", "resources", "static", "favicon."+format))
 }
 
-// SetupRoutes configures all routes for the application
+// SetupRoutes configures all routes for the application and registers them
+// on the default ServeMux.
 func SetupRoutes(cfg *config.Config) {
+	http.Handle("/", Handler(cfg))
+}
+
+// Handler builds the handler for all of the application's routes without
+// registering it anywhere, so a program that embeds the wiki can mount it on
+// its own mux.
+func Handler(cfg *config.Config) http.Handler {
 	// Create a new ServeMux to apply middleware to all routes
 	mux := http.NewServeMux()
 
@@ -500,8 +508,5 @@ func SetupRoutes(cfg *config.Config) {
 	})
 
 	// Apply middleware to all routes
-	handler := CSPMiddleware(mux)
-
-	// Set the handler for the default ServeMux
-	http.Handle("/", handler)
+	return CSPMiddleware(mux)
 }
