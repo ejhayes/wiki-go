@@ -177,6 +177,85 @@ func TestCommentsLandOnDisk(t *testing.T) {
 	}
 }
 
+// do sends a request to srv with the given method, host and headers. An empty
+// host keeps the server's own address.
+func do(t *testing.T, srv *httptest.Server, method, path, host string, header http.Header, body string) int {
+	t.Helper()
+	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "" {
+		req.Host = host
+	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestOwnerModeAnswersOnlyOnALoopbackHost(t *testing.T) {
+	_, cfg := newWiki(t)
+	h, err := New(Options{ConfigFile: cfg, OwnerUser: "owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	// A DNS-rebinding page reaches the server under its own host name.
+	if code := do(t, srv, http.MethodGet, "/api/check-auth", "attacker.example.com", nil, ""); code != http.StatusForbidden {
+		t.Errorf("foreign host = %d, want 403", code)
+	}
+	for _, host := range []string{"localhost:8484", "127.0.0.1:8484", "[::1]:8484", "localhost"} {
+		if code := do(t, srv, http.MethodGet, "/api/check-auth", host, nil, ""); code != http.StatusOK {
+			t.Errorf("host %q = %d, want 200", host, code)
+		}
+	}
+}
+
+func TestOwnerModeRefusesWritesFromAnotherSite(t *testing.T) {
+	dataDir, cfg := newWiki(t)
+	writePage(t, dataDir, "inbox/note", "# Hello embed\n")
+	h, err := New(Options{ConfigFile: cfg, OwnerUser: "owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	const path = "/api/comments/add/inbox/note"
+	const body = `{"content":"from elsewhere"}`
+
+	foreign := http.Header{"Origin": []string{"https://example.com"}}
+	if code := do(t, srv, http.MethodPost, path, "", foreign, body); code != http.StatusForbidden {
+		t.Errorf("foreign Origin = %d, want 403", code)
+	}
+	crossSite := http.Header{"Sec-Fetch-Site": []string{"cross-site"}}
+	if code := do(t, srv, http.MethodPost, path, "", crossSite, body); code != http.StatusForbidden {
+		t.Errorf("Sec-Fetch-Site cross-site = %d, want 403", code)
+	}
+
+	// The wiki's own pages and programs are still allowed.
+	own := http.Header{"Origin": []string{srv.URL}, "Sec-Fetch-Site": []string{"same-origin"}}
+	if code := do(t, srv, http.MethodPost, path, "", own, body); code != http.StatusOK {
+		t.Errorf("same-origin write = %d, want 200", code)
+	}
+	if code := do(t, srv, http.MethodPost, path, "", nil, body); code != http.StatusOK {
+		t.Errorf("write with no browser headers = %d, want 200", code)
+	}
+
+	// Reads are not refused, whatever the Origin.
+	if code := do(t, srv, http.MethodGet, "/inbox/note", "", foreign, ""); code != http.StatusOK {
+		t.Errorf("read with a foreign Origin = %d, want 200", code)
+	}
+}
+
 func TestMountsUnderAnotherRouter(t *testing.T) {
 	dataDir, cfg := newWiki(t)
 	writePage(t, dataDir, "inbox/note", "# Hello embed\n")

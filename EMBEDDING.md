@@ -25,7 +25,7 @@ mux.Handle("/", wiki)            // the wiki serves everything else
 | Option | Meaning |
 |--------|---------|
 | `ConfigFile` | Path to the wiki's `config.yaml`. Required. |
-| `OwnerUser` | A user from the config's `users` list. When set, every request is signed in as that user, so the wiki shows no login screen. Use it only when one trusted person can reach the wiki, for example on a loopback address. A request that carries another valid session keeps it. |
+| `OwnerUser` | A user from the config's `users` list. When set, every request is signed in as that user, so the wiki shows no login screen. Use it only when one trusted person can reach the wiki, for example on a loopback address. A request that carries another valid session keeps it. Because owner mode signs in without a cookie, it also answers only when the `Host` header names a loopback address, and it refuses a `POST`, `PUT`, `PATCH` or `DELETE` that a browser marks as coming from another site (an `Origin` that differs from the host, or `Sec-Fetch-Site` other than `same-origin` or `none`). A program that sends neither header is not affected. |
 
 ## Limits
 

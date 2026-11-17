@@ -15,7 +15,10 @@ package wikigo
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
 	"wiki-go/internal/app"
@@ -35,6 +38,10 @@ type Options struct {
 	// config's users list, so the wiki shows no login screen. Set it only when
 	// one trusted person can reach the wiki, for example on a loopback
 	// address. A request that carries another valid session keeps it.
+	//
+	// Because it signs in without a cookie, owner mode also answers only when
+	// the Host header names a loopback address, and refuses a POST, PUT,
+	// PATCH or DELETE that a browser marks as coming from another site.
 	OwnerUser string
 }
 
@@ -83,6 +90,19 @@ type owner struct {
 }
 
 func (o *owner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Owner mode signs in without a cookie, so a web page that the owner has
+	// open could otherwise drive the wiki through the owner's browser. Answer
+	// only on a loopback host (which stops DNS rebinding) and refuse writes
+	// that a browser says came from another site.
+	if !loopbackHost(r.Host) {
+		http.Error(w, "wikigo: owner mode answers only on a loopback host", http.StatusForbidden)
+		return
+	}
+	if unsafeMethod(r.Method) && !sameSite(r) {
+		http.Error(w, "wikigo: owner mode refuses a write from another site", http.StatusForbidden)
+		return
+	}
+
 	if auth.GetSession(r) == nil {
 		cookies, err := o.sessionCookies()
 		if err != nil {
@@ -95,6 +115,46 @@ func (o *owner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	o.next.ServeHTTP(w, r)
+}
+
+// loopbackHost reports whether a Host header names this machine's loopback
+// interface: localhost, 127.0.0.0/8 or ::1, with or without a port.
+func loopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func unsafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	return true
+}
+
+// sameSite reports whether a request may be a write from the wiki's own
+// pages or from a program. A browser marks a cross-site request with
+// Sec-Fetch-Site or an Origin that differs from the Host. A program sends
+// neither header.
+func sameSite(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || u.Host != r.Host {
+			return false
+		}
+	}
+	return true
 }
 
 // sessionCookies returns the cookies of one long-lived owner session, and
