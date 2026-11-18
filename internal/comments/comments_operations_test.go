@@ -6,6 +6,42 @@ import (
 	"testing"
 )
 
+func TestCommentsInTheSameSecondByOneUserAreAllKept(t *testing.T) {
+	commentsRoot := t.TempDir()
+	const doc = "/guides/start"
+	want := []string{"first", "second", "third"}
+	for _, text := range want {
+		if err := AddComment(commentsRoot, doc, text, "editor"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := GetComments(commentsRoot, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d comments, want %d: %#v", len(got), len(want), got)
+	}
+	seen := map[string]bool{}
+	ids := map[string]bool{}
+	for _, c := range got {
+		seen[c.Content] = true
+		ids[c.ID] = true
+		if c.Author != "editor" {
+			t.Errorf("author = %q, want editor", c.Author)
+		}
+	}
+	for _, text := range want {
+		if !seen[text] {
+			t.Errorf("comment %q was lost", text)
+		}
+	}
+	if len(ids) != len(want) {
+		t.Errorf("comment file names are not distinct: %v", ids)
+	}
+}
+
 func TestCommentOperationsUseConfiguredContainedRoot(t *testing.T) {
 	commentsRoot := filepath.Join(t.TempDir(), "custom-comments")
 	if err := AddComment(commentsRoot, "/guides/start", "nested comment", "editor"); err != nil {

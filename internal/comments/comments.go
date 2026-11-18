@@ -22,28 +22,57 @@ type Comment struct {
 	FormattedTime string        // Formatted timestamp for display
 }
 
-// AddComment creates a new comment for a document.
-func AddComment(commentsRoot, documentPath, content, username string) error {
-	// Generate timestamp in YYYYMMDDhhmmss format
-	timestamp := time.Now().Format("20060102150405")
+// maxCommentNameTries bounds how many following seconds AddComment tries when
+// a comment by the same user already has the name of the current second.
+const maxCommentNameTries = 3600
 
+// AddComment creates a new comment for a document.
+//
+// A comment file is named by the second, so two comments by one user within
+// one second would share a name. AddComment never overwrites an earlier
+// comment: it takes the next free second, which keeps the file name format
+// and the order of the comments.
+func AddComment(commentsRoot, documentPath, content, username string) error {
 	// Sanitize username for filename safety
 	safeUsername := sanitizeUsername(username)
 
-	// Create comment filename with sanitized username
-	filename := fmt.Sprintf("%s_%s.md", timestamp, safeUsername)
-	resolved, err := resolveCommentFile(commentsRoot, documentPath, filename)
-	if err != nil {
-		return fmt.Errorf("resolve comment path: %w", err)
-	}
+	when := time.Now()
+	for attempt := 0; attempt < maxCommentNameTries; attempt++ {
+		// Generate timestamp in YYYYMMDDhhmmss format
+		timestamp := when.Format("20060102150405")
 
-	// Ensure comment directory exists
-	if err := os.MkdirAll(resolved.directoryPath, 0755); err != nil {
-		return fmt.Errorf("failed to create comment directory: %w", err)
-	}
+		// Create comment filename with sanitized username
+		filename := fmt.Sprintf("%s_%s.md", timestamp, safeUsername)
+		resolved, err := resolveCommentFile(commentsRoot, documentPath, filename)
+		if err != nil {
+			return fmt.Errorf("resolve comment path: %w", err)
+		}
 
-	// Write comment content to file
-	return os.WriteFile(resolved.filePath, []byte(content), 0644)
+		// Ensure comment directory exists
+		if err := os.MkdirAll(resolved.directoryPath, 0755); err != nil {
+			return fmt.Errorf("failed to create comment directory: %w", err)
+		}
+
+		// Create the file only if it does not exist yet
+		f, err := os.OpenFile(resolved.filePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		if errors.Is(err, os.ErrExist) {
+			when = when.Add(time.Second)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("failed to create comment file: %w", err)
+		}
+
+		// Write comment content to file
+		_, werr := f.WriteString(content)
+		cerr := f.Close()
+		if werr != nil || cerr != nil {
+			os.Remove(resolved.filePath)
+			return fmt.Errorf("failed to write comment file: %w", errors.Join(werr, cerr))
+		}
+		return nil
+	}
+	return errors.New("no free comment file name")
 }
 
 // GetComments retrieves all comments for a document.
