@@ -14,24 +14,41 @@ type Metadata struct {
 	// Add additional fields here as needed
 }
 
+// split finds the frontmatter block at the start of content. The block opens
+// with a "---" line and closes at the next line that starts with "---". Lines
+// may end in "\n" or "\r\n". It returns the block's text without the
+// delimiters, the content after the closing delimiter, and whether a block was
+// found.
+func split(content string) (block, rest string, ok bool) {
+	var start int
+	switch {
+	case strings.HasPrefix(content, "---\n"):
+		start = 4
+	case strings.HasPrefix(content, "---\r\n"):
+		start = 5
+	default:
+		return "", content, false
+	}
+
+	// Find the closing delimiter
+	endDelimIndex := strings.Index(content[start:], "\n---")
+	if endDelimIndex == -1 {
+		return "", content, false
+	}
+
+	block = strings.TrimSuffix(content[start:start+endDelimIndex], "\r")
+	return block, content[start+endDelimIndex+4:], true
+}
+
 // Parse extracts and parses frontmatter from markdown content
 // Returns the parsed metadata and the content without frontmatter
 func Parse(content string) (Metadata, string, bool) {
 	var metadata Metadata
 
-	// Check if the content starts with frontmatter delimiter
-	if !strings.HasPrefix(content, "---\n") {
+	fmContent, remainingContent, ok := split(content)
+	if !ok {
 		return metadata, content, false
 	}
-
-	// Find the closing delimiter
-	endDelimIndex := strings.Index(content[4:], "\n---")
-	if endDelimIndex == -1 {
-		return metadata, content, false
-	}
-
-	// Extract the frontmatter content
-	fmContent := content[4 : 4+endDelimIndex]
 
 	// Parse the frontmatter as YAML
 	err := yaml.Unmarshal([]byte(fmContent), &metadata)
@@ -39,36 +56,22 @@ func Parse(content string) (Metadata, string, bool) {
 		return metadata, content, false
 	}
 
-	// Remove frontmatter from content
-	remainingContent := content[4+endDelimIndex+4:]
-	// Remove any leading newlines
-	remainingContent = strings.TrimLeft(remainingContent, "\n")
+	// Remove any leading line breaks
+	remainingContent = strings.TrimLeft(remainingContent, "\r\n")
 
 	return metadata, remainingContent, true
 }
 
 // HasFrontmatter checks if content has frontmatter
 func HasFrontmatter(content string) bool {
-	if !strings.HasPrefix(content, "---\n") {
-		return false
-	}
-
-	endDelimIndex := strings.Index(content[4:], "\n---")
-	return endDelimIndex != -1
+	_, _, ok := split(content)
+	return ok
 }
 
 // Extract returns just the frontmatter as a string
 func Extract(content string) string {
-	if !strings.HasPrefix(content, "---\n") {
-		return ""
-	}
-
-	endDelimIndex := strings.Index(content[4:], "\n---")
-	if endDelimIndex == -1 {
-		return ""
-	}
-
-	return content[4 : 4+endDelimIndex]
+	block, _, _ := split(content)
+	return block
 }
 
 // Add adds or updates frontmatter in content
