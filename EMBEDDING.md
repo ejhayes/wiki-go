@@ -32,5 +32,6 @@ mux.Handle("/", wiki)            // the wiki serves everything else
 
 - **One wiki per process.** The wiki keeps its state in package-level variables, so call `New` once.
 - **Pages are files.** The wiki reads `documents/<path>/document.md` under `root_dir` on every request. A program can write or change a page file while the wiki runs, and the next request shows it. Changes made this way have no version history. Edits made through the wiki do.
+- **Hidden names are not pages.** A file or folder under `documents/` whose name starts with `.`, such as a `.git` folder or a `.gitignore`, is never listed, served, searched or written. A program can keep a Git repository in a page folder.
 - **Comments are files.** Each comment is `comments/<path>/<timestamp>_<user>.md` under `root_dir`.
 - **Importing.** The package lives at the module root as `wiki-go/wikigo`. The module path is `wiki-go`, so a program that depends on a fork names it with a `replace` directive, for example `replace wiki-go => github.com/<owner>/wiki-go <version>`.

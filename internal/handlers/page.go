@@ -63,6 +63,11 @@ func PageHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
+	// Hidden folders, such as .git, are not pages.
+	if utils.HasHiddenSegment(path) {
+		http.NotFound(w, r)
+		return
+	}
 	if path == "/" {
 		HomeHandler(w, r, cfg)
 		return

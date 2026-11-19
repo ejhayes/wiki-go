@@ -413,8 +413,8 @@ func ListFilesHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config
 			continue
 		}
 
-		// Skip the document.md file
-		if file.Name() == "document.md" {
+		// Skip the document.md file and hidden files, such as .gitignore
+		if file.Name() == "document.md" || strings.HasPrefix(file.Name(), ".") {
 			continue
 		}
 
@@ -575,6 +575,12 @@ func ServeFileHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config
 	// Clean and normalize the path
 	path = filepath.Clean(path)
 	path = strings.ReplaceAll(path, "\\", "/")
+
+	// Hidden files, such as .gitignore or the files in .git, are not attachments.
+	if utils.HasHiddenSegment(path) {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
 
 	// Check access permissions
 	// We need to determine the document path from the file path
@@ -1030,6 +1036,9 @@ func ListDocumentsHandler(w http.ResponseWriter, r *http.Request, cfg *config.Co
 	err := filepath.WalkDir(documentsPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && path != documentsPath && strings.HasPrefix(d.Name(), ".") {
+			return filepath.SkipDir // hidden folders, such as .git, hold no pages
 		}
 
 		// Check if this is a document.md file

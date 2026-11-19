@@ -210,6 +210,9 @@ func gatherPages(baseURL string, cfg *config.Config, session *auth.Session) ([]S
 		if err != nil {
 			return err
 		}
+		if info.IsDir() && path != docsDir && strings.HasPrefix(info.Name(), ".") {
+			return filepath.SkipDir // hidden folders, such as .git, hold no pages
+		}
 
 		// Only include document.md files
 		if !info.IsDir() && filepath.Base(path) == "document.md" {

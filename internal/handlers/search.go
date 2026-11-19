@@ -95,6 +95,9 @@ func performSearch(query string, session *auth.Session, cfg *config.Config) []Se
 		if err != nil {
 			return err
 		}
+		if info.IsDir() && path != docsPath && strings.HasPrefix(info.Name(), ".") {
+			return filepath.SkipDir // hidden folders, such as .git, hold no pages
+		}
 
 		// Only document.md represents a wiki page; other Markdown files are attachments.
 		if info.Mode().IsRegular() && info.Name() == "document.md" {

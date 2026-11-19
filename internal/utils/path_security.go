@@ -48,6 +48,18 @@ func CanonicalRequestPath(requestPath string) (string, error) {
 	return canonical, nil
 }
 
+// HasHiddenSegment reports whether a slash-separated path has a part that
+// starts with ".", such as ".git" or ".gitignore". The wiki lists no hidden
+// name, so it also serves and writes none.
+func HasHiddenSegment(p string) bool {
+	for _, segment := range strings.Split(strings.ReplaceAll(p, "\\", "/"), "/") {
+		if strings.HasPrefix(segment, ".") && segment != "." {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveRelativeDocumentPath resolves a relative URL document path below the
 // configured documents root. URL-derived paths must be accepted and
 // canonicalized here before any part of them is passed to filepath.Join.
@@ -73,6 +85,9 @@ func ResolveRelativeDocumentPath(rootDir, documentsDir, relativePath string) (Re
 	containedRelativePath := strings.TrimPrefix(canonical, "/")
 	if containedRelativePath == "" {
 		return ResolvedDocumentPath{}, fmt.Errorf("document path is empty")
+	}
+	if HasHiddenSegment(containedRelativePath) {
+		return ResolvedDocumentPath{}, fmt.Errorf("document path names a hidden file or folder")
 	}
 
 	documentsRoot, err := filepath.Abs(filepath.Join(rootDir, documentsDir))

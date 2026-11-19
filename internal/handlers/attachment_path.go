@@ -60,6 +60,9 @@ func resolveAttachmentStoragePath(cfg *config.Config, attachmentPath string) (re
 	if storagePath == "" {
 		return resolvedAttachmentPath{}, "", fmt.Errorf("attachment path is empty")
 	}
+	if utils.HasHiddenSegment(storagePath) {
+		return resolvedAttachmentPath{}, "", fmt.Errorf("attachment path names a hidden file or folder")
+	}
 
 	var allowedRoot string
 	var relativePath string
