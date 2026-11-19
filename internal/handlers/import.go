@@ -307,7 +307,11 @@ func processMarkdownFile(file *zip.File, jobID string, cfg *config.Config) error
 
 	// Write the content to document.md in the target directory
 	docPath := filepath.Join(docDir, "document.md")
-	
+	action := PageEdit
+	if _, err := os.Stat(docPath); os.IsNotExist(err) {
+		action = PageCreate
+	}
+
 	// Ensure the content has proper permissions
 	err = os.WriteFile(docPath, content, 0644)
 	if err != nil {
@@ -318,6 +322,12 @@ func processMarkdownFile(file *zip.File, jobID string, cfg *config.Config) error
 	err = os.Chmod(docPath, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to set file permissions: %v", err)
+	}
+
+	// The import runs after its request has been answered, so a refused page
+	// becomes an import error.
+	if err := notifyPageChange(action, "/"+filepath.ToSlash(targetPath), ""); err != nil {
+		return fmt.Errorf("page refused: %v", err)
 	}
 
 	// Add to successful imports

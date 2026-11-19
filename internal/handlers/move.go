@@ -303,6 +303,10 @@ func MoveDocumentHandler(w http.ResponseWriter, r *http.Request, cfg *config.Con
 		}
 	}
 
+	if pageChangeRejected(w, notifyPageChange(PageMove, newPath, moveReq.SourcePath)) {
+		return
+	}
+
 	// Return success response with both old and new paths
 	sendJSONResponse(w, true, "Document moved successfully", http.StatusOK, newPath, moveReq.SourcePath)
 }

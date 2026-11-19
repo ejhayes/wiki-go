@@ -323,6 +323,10 @@ func handleVersionRestore(w http.ResponseWriter, r *http.Request, cfg *config.Co
 	}
 	logger.Info("User %s restored version %s of %s", user, timestamp, documentPath)
 
+	if pageChangeRejected(w, notifyPageChange(PageEdit, resolved.logicalPath, "")) {
+		return
+	}
+
 	// Return success response
 	response := map[string]interface{}{
 		"success": true,

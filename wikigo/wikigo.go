@@ -24,6 +24,7 @@ import (
 	"wiki-go/internal/app"
 	"wiki-go/internal/auth"
 	"wiki-go/internal/config"
+	"wiki-go/internal/handlers"
 	"wiki-go/internal/routes"
 )
 
@@ -43,6 +44,27 @@ type Options struct {
 	// the Host header names a loopback address, and refuses a POST, PUT,
 	// PATCH or DELETE that a browser marks as coming from another site.
 	OwnerUser string
+
+	// OnChange, when set, is called after the wiki has written a page change
+	// under its documents folder to disk and before it answers. An error
+	// stops the answer: the wiki responds 422 with the error's text as the
+	// message, and the editor shows it. The wiki changes nothing else on disk
+	// after an error. Changes to the home page are not reported. An import
+	// runs after its request is answered, so a refused imported page becomes
+	// an import error instead.
+	OnChange func(Change) error
+}
+
+// Change describes one page change.
+type Change struct {
+	// Action is "create", "edit", "delete" or "move". An upload, rename or
+	// delete of a page's file is an "edit" of that page.
+	Action string
+	// Path is the page path below the documents folder, such as
+	// "personal/cooking/bread", with no leading slash.
+	Path string
+	// OldPath is the page path before a "move", and empty otherwise.
+	OldPath string
 }
 
 // New prepares the wiki and returns its handler. It runs the same start-up
@@ -56,6 +78,13 @@ func New(opts Options) (http.Handler, error) {
 	cfg, err := app.Init(opts.ConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("wikigo: %w", err)
+	}
+
+	handlers.SetPageChangeHook(nil)
+	if onChange := opts.OnChange; onChange != nil {
+		handlers.SetPageChangeHook(func(c handlers.PageChange) error {
+			return onChange(Change{Action: c.Action, Path: c.Path, OldPath: c.OldPath})
+		})
 	}
 
 	handler := routes.Handler(cfg)

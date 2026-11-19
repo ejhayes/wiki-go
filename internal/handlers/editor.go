@@ -176,6 +176,12 @@ func SaveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	// A save of a page that has no document.md yet creates it.
+	action := PageEdit
+	if _, err := os.Stat(docPath); os.IsNotExist(err) {
+		action = PageCreate
+	}
+
 	// VERSION CONTROL: Save current version before overwriting
 	// Check if the document already exists
 	if _, err := os.Stat(docPath); err == nil && cfg.Wiki.MaxVersions > 0 {
@@ -227,6 +233,10 @@ func SaveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("User %s edited document %s", session.Username, filepath.Join(cfg.Wiki.RootDir, relativePath))
+
+	if pageChangeRejected(w, notifyPageChange(action, path, "")) {
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -372,6 +382,10 @@ func CreateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("User %s created document %s", session.Username, filepath.Join(cfg.Wiki.RootDir, cfg.Wiki.DocumentsDir, cleanPath))
+
+	if pageChangeRejected(w, notifyPageChange(PageCreate, logicalPath, "")) {
+		return
+	}
 
 	// Return success
 	w.Header().Set("Content-Type", "application/json")
@@ -543,6 +557,10 @@ func DeleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			logger.Info("Deleted comments directory: %s", commentsPath)
 		}
+	}
+
+	if pageChangeRejected(w, notifyPageChange(PageDelete, docPath, "")) {
+		return
 	}
 
 	// Return success response

@@ -112,6 +112,9 @@ func AddLinkHandler(w http.ResponseWriter, r *http.Request) {
 		sendLinkError(w, "Failed to save document", http.StatusInternalServerError, err.Error())
 		return
 	}
+	if pageChangeRejected(w, notifyLinksPageChange(decodedPath)) {
+		return
+	}
 
 	// Success response
 	w.WriteHeader(http.StatusOK)
@@ -232,6 +235,9 @@ func EditLinkHandler(w http.ResponseWriter, r *http.Request) {
 		sendLinkError(w, "Failed to save document", http.StatusInternalServerError, err.Error())
 		return
 	}
+	if pageChangeRejected(w, notifyLinksPageChange(decodedPath)) {
+		return
+	}
 
 	// Success response
 	w.WriteHeader(http.StatusOK)
@@ -347,6 +353,9 @@ func DeleteLinkHandler(w http.ResponseWriter, r *http.Request) {
 	// Save document with version control
 	if err := saveDocumentWithVersioning(docPath, path, []byte(updatedContent)); err != nil {
 		sendLinkError(w, "Failed to save document", http.StatusInternalServerError, err.Error())
+		return
+	}
+	if pageChangeRejected(w, notifyLinksPageChange(decodedPath)) {
 		return
 	}
 
@@ -503,6 +512,16 @@ func generateLinksMarkdown(linksData *frontmatter.LinksData, originalContent str
 	}
 	
 	return result.String(), nil
+}
+
+// notifyLinksPageChange reports the edit of the links page at path, the
+// decoded path from the request URL.
+func notifyLinksPageChange(path string) error {
+	logicalPath, err := logicalDocumentPath(filepath.ToSlash(filepath.Clean(path)))
+	if err != nil {
+		return nil
+	}
+	return notifyPageChange(PageEdit, logicalPath, "")
 }
 
 func saveDocumentWithVersioning(docPath, relativePath string, content []byte) error {

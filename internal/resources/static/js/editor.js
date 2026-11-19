@@ -278,7 +278,21 @@ function initializeEditControls() {
                     body: content
                 });
 
-                if (!response.ok) throw new Error('Failed to save content');
+                if (!response.ok) {
+                    // Show the server's message, such as the reason a
+                    // page was refused, and stay in edit mode with the text.
+                    const saveError = new Error('Failed to save content');
+                    try {
+                        const data = await response.json();
+                        if (data && data.message) {
+                            saveError.message = data.message;
+                            saveError.fromServer = true;
+                        }
+                    } catch (_) {
+                        // Not JSON: keep the fixed text.
+                    }
+                    throw saveError;
+                }
 
                 // Update originalContent to match what was just saved
                 if (window.EditorCore) {
@@ -292,7 +306,7 @@ function initializeEditControls() {
 
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to save changes');
+                alert(error.fromServer ? error.message : 'Failed to save changes');
             }
         });
     }

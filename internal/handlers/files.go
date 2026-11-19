@@ -254,6 +254,10 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request, cfg *config.Confi
 			return
 		}
 
+		if pageChangeRejected(w, notifyPageChange(PageEdit, logicalPath, "")) {
+			return
+		}
+
 		// Create URL path for the file
 		urlPath := filepath.Join("/api/files", docPath, filename)
 		// Replace backslashes with forward slashes for URLs
@@ -286,12 +290,19 @@ func UploadFileHandler(w http.ResponseWriter, r *http.Request, cfg *config.Confi
 
 	// Copy the uploaded file to the destination file
 	_, err = io.Copy(dst, file)
+	if err == nil {
+		err = dst.Close()
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(FileResponse{
 			Success: false,
 			Message: "Failed to save uploaded file.",
 		})
+		return
+	}
+
+	if pageChangeRejected(w, notifyPageChange(PageEdit, logicalPath, "")) {
 		return
 	}
 
@@ -532,6 +543,10 @@ func DeleteFileHandler(w http.ResponseWriter, r *http.Request, cfg *config.Confi
 			Success: false,
 			Message: "Failed to delete file.",
 		})
+		return
+	}
+
+	if pageChangeRejected(w, notifyPageChange(PageEdit, logicalPath, "")) {
 		return
 	}
 
@@ -1234,6 +1249,10 @@ func RenameFileHandler(w http.ResponseWriter, r *http.Request, cfg *config.Confi
 
 	logger.Debug("File renamed successfully: %s -> %s", source.filesystemPath, destination.filesystemPath)
 	logger.Debug("URL path: %s", urlPath)
+
+	if pageChangeRejected(w, notifyPageChange(PageEdit, sourceLogicalPath, "")) {
+		return
+	}
 
 	// Return success response
 	w.WriteHeader(http.StatusOK)
